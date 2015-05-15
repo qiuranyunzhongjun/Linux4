@@ -36,13 +36,13 @@
 ## 实验步骤
 
 ### 准备工作
-1.打开[github](https://github.com/)，登陆你小组的账户或者你的账户，然后访问：https://github.com/tonyshaw/Linux4 ，点击右上角的Fork。将该程序Fork到你的账户中。**注意** 如果你以前使用过github，那么可能你的电脑上保存有原账户的key（default ssh key），这会导致你push的时候被deny。这种情况下推荐使用你原本的账户进行实验，或者请参考[这篇文章](https://gist.github.com/jexchan/2351996)添加多个ssh key。然而大部分童鞋并不会遇到这个问题╯□╰。
 
-2.打开终端\(Terminal\)，`cd` 到想要存放工程的文件夹下，并执行如下命令将程序下载到本地。**注意：** 一定要从你自己用户名Fork后的Repository Clone，不要直接从我原本的地址Clone。：
+1.打开终端\(Terminal\)，`cd` 到想要存放工程的文件夹下，并执行如下命令将程序下载到本地。
 ```shell
-git clone https://github.com/你自己的用户名/Linux4.git
+git clone https://github.com/tonyshaw/Linux4.git
 ```
-2.`cd` 到Linux4目录中，创建大小为32M的全0空文件，作为虚拟优盘。
+
+3.`cd` 到Linux4目录中，创建大小为32M的全0空文件，作为虚拟优盘。
 ```shell
 dd if=/dev/zero of=data bs=32M count=1
 ```
@@ -52,7 +52,7 @@ dd if=/dev/zero of=data bs=32M count=1
 ```shell
 mkfs.msdos data
 ```
-**注意**，msdos会根据data文件的大小自动决定文件系统的格式。通常情况下，如果data < 16MB，则会被格式化成为FAT12。否则会被格式化为FAT16，更大的文件会被格式化为FAT32。为了省事请直接创建32M的空文件。否则（比如你创建了1M的空文件）你需要用`-F 16`指令强制指定文件系统格式。
+**注意**，msdos会根据data文件的大小自动决定文件系统的格式。通常情况下，如果data < 16MB，则会被格式化成为FAT12。否则会被格式化为FAT16，更大的文件会被格式化为FAT32。为了省事请直接创建32M的空文件。否则（比如你创建了1M的空文件）你需要用`-F 16`指令强制指定文件系统为FAT16。
 
 4.验证该虚拟优盘
 ```shell
@@ -65,32 +65,22 @@ sudo chmod -R 777 /dev/sdb1
 #卸载虚拟优盘
 sudo umount /dev/sdb1
 ```
-挂载虚拟优盘后，从桌面环境里进入sdb1文件夹，可以发现该文件夹剩余空间在31M左右，并且可以像优盘一样使用。**注意**，mount会根据文件大小自动决定是使用FAT12，16，32中的哪种格式挂载，如果如前文所说你使用了比较小的文件作为虚拟优盘，这里可能需要用到`fat=16` 来指定挂载格式。
+挂载虚拟优盘后，从桌面环境里进入sdb1文件夹，可以发现该文件夹剩余空间在31M左右，并且可以像优盘一样使用。**注意**，mount会根据文件大小自动决定是使用FAT12，16，32中的哪种格式挂载，如果如前文所说你使用了比较小的文件作为虚拟优盘，这里可能需要用到`fat=16` 来指定挂载为FAT16。
 
 ### 第一周
 
 根据上文描述，你建立的data文件应该在Linux4文件夹中。在进行以下步骤之前，你需要按照上文描述卸载虚拟优盘。
 
-1.打开终端，`cd` 到**准备工作**中的Linux4文件夹。**Step1：这时，提一次提交你自己的代码。** 每个**Step N** 都是一个检查点，需要提交一次。最后按照步骤给分。
+1.打开终端，`cd` 到Linux4文件夹。**Step1：这时，提一次提交你自己的代码。** 每个**Step N** 都是一个检查点，需要提交一次。最后按照步骤给分。**注意** 这些操作记录会被保存在.git文件夹内，如果你误删了.git文件夹，需要重新完成实验。
 ```shell
 git add .
 #将学号+Step N 作为注释，提交，例如
 git commit -m "13060000 Step 1"
-git push origin master
-#提交成功后，应得到类似于下面的反馈，内容可能不一样，大体样子相似
-Counting objects: 3, done.
-Delta compression using up to 8 threads.
-Compressing objects: 100% (3/3), done.
-Writing objects: 100% (3/3), 31.37 KiB | 0 bytes/s, done.
-Total 3 (delta 1), reused 0 (delta 0)
-To https://github.com/tonyshaw/Test.git
-30982e1..fef5800  master -> master
 ```
-当你提交成功之后，可以从浏览器访问github，找到你的repository，可以发现repo中多了一个data文件，其后面的注释是`13060000 Step 1` 。
 
-2.在Linux4文件夹内执行 `make` 指令。然后执行`./filesys`，程序应当成功编译并且执行。但是发现程序有错误：open failed: Is a directory 。修改该bug，找到`main`函数，发现第一次运行的错误是由于打开文件错误，`open`命令不能打开一个文件路径，所以打开filesys.h，修改`DEVNAME`为data。重新执行`make`，然后运行`./filesys`，程序应该可以正常执行，并且可以尝试运行基本要求中的指令。**Step 2**，这里Step 2的意思是说你需要重新来一遍git add ., git commit, git push.以表明你完成了检查点2。整个实验需要提交5次左右，后面我不会单独提醒了！！！不会了！！！我说的很明白了，每个Step都需要提交一边，不得分不能怪助教@_@
+2.在Linux4文件夹内执行 `make` 指令。然后执行`./filesys`，程序应当成功编译并且执行。但是发现程序有错误：open failed: Is a directory 。修改该bug，找到`main`函数，发现第一次运行的错误是由于打开文件错误，`open`命令不能打开一个文件路径，所以打开filesys.h，修改`DEVNAME`为data。重新执行`make`，然后运行`./filesys`，程序应该可以正常执行，并且可以尝试运行基本要求中的指令。**Step 2**，这里Step 2的意思是说你需要重新来一遍git add , git commit。以表明你完成了检查点2。整个实验需要提交5次左右，后面我不会单独提醒了！！！不会了！！！我说的很明白了，每个Step都需要提交一边，不得分不能怪助教@_@
 
-3.童鞋们回去以后熟悉一下教材P88，以及我给的两个pdf中的FAT16结构。要不然下周我说的每个字你都认识，但你就是听不懂我在讲啥。
+3.童鞋们回去以后熟悉一下教材P88，以及我给的两个pdf中的FAT16结构。
 
 ### 第二周
 
@@ -131,4 +121,6 @@ ROOTDIR_OFFSET);
 
 5.*其他：* 代码要修改的地方很多，鼓励创新，提高要求没有必要全部都做，量力而行做好即可。重要的是通过这个实验理解FAT16这个文件系统结构，并可以对该文件系统进行操作。虽然该结构已经停止使用，但是理解这个结构对于未来理解FAT32，以及其他文件结构都有很大的帮助。
 
+## 提交
+请提交到课程网站，无需push到github上。
 > By J.Xiao Written with [StackEdit](https://stackedit.io/).
