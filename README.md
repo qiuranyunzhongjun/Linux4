@@ -81,12 +81,15 @@ git commit -m "13060000 Step 1"
 **助教，我喜欢Zhuangbility，想用Github #_#...** ，然而助教表示这并没有什么额外加分╯□╰
 
 对于这类同学请参考1.1~1.3，首先你需要设置Github，如果你已经设置好可以略去1.1。如果你不是用ssh而是用的https，那么请自行baidu命令。
+
 1.1设置Github
 [添加SSH Key到自己账户](https://help.github.com/articles/generating-ssh-keys/)。**注意** 文中的`pbcopy`是在X OS下才有的命令，Ubuntu用户请自行gedit...
+
 1.2[访问Linux4](https://github.com/tonyshaw/Linux4)，点击右上角Fork，将该工程Fork到你的账户中。
+
 1.3
 ```shell
-git clone git clone git@github.com:你的账户/Linux4.git
+git clone git@github.com:你的账户/Linux4.git
 #然后在这个Linux4文件夹中完成实验，每完成一步之后，即使用过git commit指令之后，执行以下指令：
 git push origin master
 #成功之后，你就可以在你自己的repo中看到刚刚push上去的文件，并且Github文件列表中会有你刚刚commit -m后面的文字。
