@@ -8,20 +8,43 @@
 #include<ctype.h>
 #include "filesys.h"
 
+/*
+ * 内存中数据存储有两种形式，低位存储（Little Endian），高位存储（Big Endian）。
+ * 以下宏的目的是在这两种存储方式之间相互转换
+ * 一般来说，硬盘上是高位存储，电脑上是低位存储。但这不是确定的。
+ * 参考资料http://www.cnblogs.com/renyuan/archive/2013/05/26/3099766.html
+ */
+/*  
+以0x12345678为例： 
+    Big Endian 
+    低地址                              高地址 
+    -----------------------------------------> 
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+    |   12   |   34  |   56   |   78    | 
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+    Little Endian 
+    低地址                              高地址 
+    -----------------------------------------> 
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+    |   78   |   56  |   34   |   12    | 
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
+*/
 
 #define RevByte(low,high) ((high)<<8|(low))
 #define RevWord(lowest,lower,higher,highest) ((highest)<< 24|(higher)<<16|(lower)<<8|lowest) 
 
 /*
-*功能：打印启动项记录
-*/
+ *读取BootSector，获取FAT16的格式信息
+ *打印启动项记录
+ */
 void ScanBootSector()
 {
 	unsigned char buf[SECTOR_SIZE];
 	int ret,i;
-
+	//将BootSector读入缓冲区
 	if((ret = read(fd,buf,SECTOR_SIZE))<0)
 		perror("read boot sector failed");
+	//获取FAT16信息
 	for(i = 0; i < 8; i++)
 		bdptor.Oem_name[i] = buf[i+0x03];
 	bdptor.Oem_name[i] = '\0';
@@ -38,7 +61,7 @@ void ScanBootSector()
 	bdptor.Heads = RevByte(buf[0x1a],buf[0x1b]);
 	bdptor.HiddenSectors = RevByte(buf[0x1c],buf[0x1d]);
 
-
+	
 	printf("Oem_name \t\t%s\n"
 		"BytesPerSector \t\t%d\n"
 		"SectorsPerCluster \t%d\n"
@@ -139,11 +162,11 @@ int GetEntry(struct Entry *pentry)
 		for (i=0 ;i<=10;i++)
 			pentry->short_name[i] = buf[i];
 		pentry->short_name[i] = '\0';
-
+		//去掉文件名结尾的空格
 		FileNameFormat(pentry->short_name); 
 
 
-
+		//以下两个还原文件时间的函数有问题，请参照pdf文档修正
 		info[0]=buf[22];
 		info[1]=buf[23];
 		findTime(&(pentry->hour),&(pentry->min),&(pentry->sec),info);  
@@ -254,7 +277,7 @@ int fd_ls()
 ：pentry    类型：struct Entry*
 ：mode      类型：int，mode=1，为目录表项；mode=0，为文件
 *返回值：偏移值大于0，则成功；-1，则失败
-*功能：搜索当前目录，查找文件或目录项
+*功能：搜索当前目录，查找名为entryname的文件或目录项，如果没找到但会-1，找到了返回目标文件在硬盘中的偏移
 */
 int ScanEntry (char *entryname,struct Entry *pentry,int mode)
 {
@@ -299,9 +322,6 @@ int ScanEntry (char *entryname,struct Entry *pentry,int mode)
 			offset += abs(ret);
 			if(pentry->subdir == mode &&!strcmp((char*)pentry->short_name,uppername))
 				return offset;
-
-
-
 		}
 		return -1;
 	}
@@ -328,12 +348,14 @@ int fd_cd(char *dir)
 	/*返回上一级目录*/
 	if(!strcmp(dir,"..") && curdir!=NULL)
 	{
+	  //fatherdir 用于保存父目录信息。
 		curdir = fatherdir[dirno];
 		dirno--; 
 		return 1;
 	}
+	//注意此处有内存泄露
 	pentry = (struct Entry*)malloc(sizeof(struct Entry));
-
+	
 	ret = ScanEntry(dir,pentry,1);
 	if(ret < 0)
 	{
@@ -372,7 +394,8 @@ void ClearFatCluster(unsigned short cluster)
 {
 	int index;
 	index = cluster * 2;
-
+	//*2是因为我们用16bytes来表示一个cluster，这16字节是按照8字节8字节存入fatbuf中
+	//所以每次更新要将连着的两个清0
 	fatbuf[index]=0x00;
 	fatbuf[index+1]=0x00;
 
@@ -461,19 +484,22 @@ int fd_df(char *filename)
 	ClearFatCluster( seed );
 
 	/*清除目录表项*/
-	c=0xe5;
+	c=0xe5;//e5表示该目录项可用
 
-
+	//现将文件指针定位到目录处，0x20等价于32，因为每条目录表项32bytes
 	if(lseek(fd,ret-0x20,SEEK_SET)<0)
 		perror("lseek fd_df failed");
+	//标记目录表项可用
 	if(write(fd,&c,1)<0)
 		perror("write failed");  
 
-
+	/*
+        这段话在源程序中存在，但助教感觉这句话是错的。。。o(╯□╰)o
+        如果发现助教的感觉错了赶紧告诉助教，有加分！！
 	if(lseek(fd,ret-0x40,SEEK_SET)<0)
 		perror("lseek fd_df failed");
 	if(write(fd,&c,1)<0)
-		perror("write failed");
+	perror("write failed");*/
 
 	free(pentry);
 	if(WriteFat()<0)
@@ -548,14 +574,16 @@ int fd_cf(char *filename,int size)
 			offset = ROOTDIR_OFFSET;
 			while(offset < DATA_OFFSET)
 			{
+			  //读取一个条目
 				if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
 					perror("read entry failed");
 
 				offset += abs(ret);
-
+				//看看条目是否可用（e5）或者是不是表示后面没有更多条目（00）
 				if(buf[0]!=0xe5&&buf[0]!=0x00)
 				{
-					while(buf[11] == 0x0f)
+				  //buf[11]是attribute，但是感觉下面这个while循环并没有什么卵用。。。
+				  while(buf[11] == 0x0f)
 					{
 						if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
 							perror("read root dir failed");
@@ -587,6 +615,8 @@ int fd_cf(char *filename,int size)
 					c[30] = ((size& 0x00ff0000)>>16);
 					c[31] = ((size& 0xff000000)>>24);
 
+					/*还有很多内容并没有写入，大家请自己补充*/
+					/*而且这里还有个问题，就是对于目录表项的值为00的情况处理的不好*/
 					if(lseek(fd,offset,SEEK_SET)<0)
 						perror("lseek fd_cf failed");
 					if(write(fd,&c,DIR_ENTRY_SIZE)<0)
@@ -606,6 +636,7 @@ int fd_cf(char *filename,int size)
 		}
 		else 
 		{
+		  //子目录的情况与根目录类似
 			cluster_addr = (curdir->FirstCluster -2 )*CLUSTER_SIZE + DATA_OFFSET;
 			if((ret= lseek(fd,cluster_addr,SEEK_SET))<0)
 				perror("lseek cluster_addr failed");
@@ -686,7 +717,7 @@ int main()
 	int size=0;
 	char name[12];
 	if((fd = open(DEVNAME,O_RDWR))<0)
-		perror("open failed");
+	  perror("open failed");//以可读写方式打开文件
 	ScanBootSector();
 	if(ReadFat()<0)
 		exit(1);

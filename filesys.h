@@ -1,7 +1,12 @@
 ﻿#ifndef FILESYS_H
 #define FILESYS_H
 #include<stddef.h>
-#define DEVNAME "/dev/sdb1"                         
+#define DEVNAME "/dev/sdb1" //这里要修改成虚拟u盘
+/*
+ * 下面这些暴力算的虽然正确，但其实不合法。
+ * 我们从BootSector中可以读出整个FAT的参数。
+ * 这些参数会在ScanBootSector()的时候保存在BootDescriptor_t中
+ */
 #define DIR_ENTRY_SIZE 32
 #define SECTOR_SIZE 512
 #define CLUSTER_SIZE 512*4                         
@@ -45,6 +50,7 @@ struct BootDescriptor_t{
 	int HiddenSectors;         /*0x1c-0x1d*/
 };
 
+/*目录项,一共32字节*/
 struct Entry{
 	unsigned char short_name[12];   /*字节0-10，11字节的短文件名*/
 	unsigned char long_name[27];    /*未使用，26字节的长文件名*/
@@ -57,6 +63,7 @@ struct Entry{
 	*N  N  A  D  V  S  H  R         N未使用
 	*/
 
+        //这是某种C语言黑科技，表示定义的变量按照unsigned char解析，但是所占空间只分配一个bit。。。并不知道上一任助教或者老师从哪里找来的这种黑科技
 	unsigned char readonly:1;
 	unsigned char hidden:1;
 	unsigned char system:1;
@@ -65,6 +72,7 @@ struct Entry{
 	unsigned char archive:1;
 };
 
+//下面这些函数的作用我写到.c文件中了。
 int fd_ls();
 int fd_cd(char *dir);
 int fd_df(char *file_name);
@@ -91,7 +99,7 @@ void ClearFatCluster(unsigned short cluster);
 
 int fd;
 struct BootDescriptor_t bdptor;
-struct Entry *curdir = NULL;
+struct Entry *curdir = NULL;//当前所在的目录，默认NULL表示位于根目录
 int dirno = 0;/*代表目录的层数*/
 struct Entry* fatherdir[10];
 
