@@ -1,34 +1,13 @@
-﻿#include<stdio.h>
-#include<unistd.h>
-#include<stdlib.h>
-#include<sys/types.h>
-#include<sys/stat.h>
-#include<fcntl.h>
-#include<string.h>
-#include<ctype.h>
+﻿#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
+#include <ctype.h>
+#include <err.h>
 #include "filesys.h"
-
-/*
- * 内存中数据存储有两种形式，低位存储（Little Endian），高位存储（Big Endian）。
- * 以下宏的目的是在这两种存储方式之间相互转换
- * 一般来说，硬盘上是高位存储，电脑上是低位存储。但这不是确定的。
- * 参考资料http://www.cnblogs.com/renyuan/archive/2013/05/26/3099766.html
- */
-/*  
-以0x12345678为例： 
-    Big Endian 
-    低地址                              高地址 
-    -----------------------------------------> 
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
-    |   12   |   34  |   56   |   78    | 
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
-    Little Endian 
-    低地址                              高地址 
-    -----------------------------------------> 
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
-    |   78   |   56  |   34   |   12    | 
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ 
-*/
 
 #define RevByte(low,high) ((high)<<8|(low))
 #define RevWord(lowest,lower,higher,highest) ((highest)<< 24|(higher)<<16|(lower)<<8|lowest) 
@@ -43,7 +22,7 @@ void ScanBootSector()
 	int ret,i;
 	//将BootSector读入缓冲区
 	if((ret = read(fd,buf,SECTOR_SIZE))<0)
-		perror("read boot sector failed");
+		err(1, "read boot sector failed");
 	//获取FAT16信息
 	for(i = 0; i < 8; i++)
 		bdptor.Oem_name[i] = buf[i+0x03];
@@ -143,7 +122,7 @@ int GetEntry(struct Entry *pentry)
 
 	/*读一个目录表项，即32字节*/
 	if( (ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
-		perror("read entry failed");
+		err(1, "read entry failed");
 	count += ret;
 
 	if(buf[0]==0xe5 || buf[0]== 0x00)
@@ -154,7 +133,7 @@ int GetEntry(struct Entry *pentry)
 		while (buf[11]== 0x0f) 
 		{
 			if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
-				perror("read root dir failed");
+				err(1, "read root dir failed");
 			count += ret;
 		}
 
@@ -199,7 +178,7 @@ int fd_ls()
 	struct Entry entry;
 	unsigned char buf[DIR_ENTRY_SIZE];
 	if( (ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
-		perror("read entry failed");
+		err(1, "read entry failed");
 	if(curdir==NULL)
 		printf("Root_dir\n");
 	else
@@ -210,7 +189,7 @@ int fd_ls()
 	{
 		/*将fd定位到根目录区的起始地址*/
 		if((ret= lseek(fd,ROOTDIR_OFFSET,SEEK_SET))<0)
-			perror("lseek ROOTDIR_OFFSET failed");
+			err(1, "lseek ROOTDIR_OFFSET failed");
 
 		offset = ROOTDIR_OFFSET;
 
@@ -242,7 +221,7 @@ int fd_ls()
 	{
 		cluster_addr = DATA_OFFSET + (curdir->FirstCluster-2) * CLUSTER_SIZE ;
 		if((ret = lseek(fd,cluster_addr,SEEK_SET))<0)
-			perror("lseek cluster_addr failed");
+			err(1, "lseek cluster_addr failed");
 
 		offset = cluster_addr;
 
@@ -291,7 +270,7 @@ int ScanEntry (char *entryname,struct Entry *pentry,int mode)
 	if(curdir ==NULL)  
 	{
 		if((ret = lseek(fd,ROOTDIR_OFFSET,SEEK_SET))<0)
-			perror ("lseek ROOTDIR_OFFSET failed");
+			err(1, "lseek ROOTDIR_OFFSET failed");
 		offset = ROOTDIR_OFFSET;
 
 
@@ -313,7 +292,7 @@ int ScanEntry (char *entryname,struct Entry *pentry,int mode)
 	{
 		cluster_addr = DATA_OFFSET + (curdir->FirstCluster -2)*CLUSTER_SIZE;
 		if((ret = lseek(fd,cluster_addr,SEEK_SET))<0)
-			perror("lseek cluster_addr failed");
+			err(1, "lseek cluster_addr failed");
 		offset= cluster_addr;
 
 		while(offset<cluster_addr + CLUSTER_SIZE)
@@ -488,18 +467,18 @@ int fd_df(char *filename)
 
 	//现将文件指针定位到目录处，0x20等价于32，因为每条目录表项32bytes
 	if(lseek(fd,ret-0x20,SEEK_SET)<0)
-		perror("lseek fd_df failed");
+		err(1, "lseek fd_df failed");
 	//标记目录表项可用
 	if(write(fd,&c,1)<0)
-		perror("write failed");  
+		err(1, "write failed");  
 
 	/*
         这段话在源程序中存在，但助教感觉这句话是错的。。。o(╯□╰)o
         如果发现助教的感觉错了赶紧告诉助教，有加分！！
 	if(lseek(fd,ret-0x40,SEEK_SET)<0)
-		perror("lseek fd_df failed");
+		err(1, "lseek fd_df failed");
 	if(write(fd,&c,1)<0)
-	perror("write failed");*/
+	err(1, "write failed");*/
 
 	free(pentry);
 	if(WriteFat()<0)
@@ -570,13 +549,13 @@ int fd_cf(char *filename,int size)
 		{ 
 
 			if((ret= lseek(fd,ROOTDIR_OFFSET,SEEK_SET))<0)
-				perror("lseek ROOTDIR_OFFSET failed");
+				err(1, "lseek ROOTDIR_OFFSET failed");
 			offset = ROOTDIR_OFFSET;
 			while(offset < DATA_OFFSET)
 			{
 			  //读取一个条目
 				if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
-					perror("read entry failed");
+					err(1, "read entry failed");
 
 				offset += abs(ret);
 				//看看条目是否可用（e5）或者是不是表示后面没有更多条目（00）
@@ -586,7 +565,7 @@ int fd_cf(char *filename,int size)
 				  while(buf[11] == 0x0f)
 					{
 						if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
-							perror("read root dir failed");
+							err(1, "read root dir failed");
 						offset +=abs(ret);
 					}
 				}
@@ -618,9 +597,9 @@ int fd_cf(char *filename,int size)
 					/*还有很多内容并没有写入，大家请自己补充*/
 					/*而且这里还有个问题，就是对于目录表项的值为00的情况处理的不好*/
 					if(lseek(fd,offset,SEEK_SET)<0)
-						perror("lseek fd_cf failed");
+						err(1, "lseek fd_cf failed");
 					if(write(fd,&c,DIR_ENTRY_SIZE)<0)
-						perror("write failed");
+						err(1, "write failed");
 
 
 
@@ -639,12 +618,12 @@ int fd_cf(char *filename,int size)
 		  //子目录的情况与根目录类似
 			cluster_addr = (curdir->FirstCluster -2 )*CLUSTER_SIZE + DATA_OFFSET;
 			if((ret= lseek(fd,cluster_addr,SEEK_SET))<0)
-				perror("lseek cluster_addr failed");
+				err(1, "lseek cluster_addr failed");
 			offset = cluster_addr;
 			while(offset < cluster_addr + CLUSTER_SIZE)
 			{
 				if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
-					perror("read entry failed");
+					err(1, "read entry failed");
 
 				offset += abs(ret);
 
@@ -653,7 +632,7 @@ int fd_cf(char *filename,int size)
 					while(buf[11] == 0x0f)
 					{
 						if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
-							perror("read root dir failed");
+							err(1, "read root dir failed");
 						offset +=abs(ret);
 					}
 				}
@@ -678,9 +657,9 @@ int fd_cf(char *filename,int size)
 					c[31] = ((size& 0xff000000)>>24);
 
 					if(lseek(fd,offset,SEEK_SET)<0)
-						perror("lseek fd_cf failed");
+						err(1, "lseek fd_cf failed");
 					if(write(fd,&c,DIR_ENTRY_SIZE)<0)
-						perror("write failed");
+						err(1, "write failed");
 
 
 
@@ -710,14 +689,20 @@ void do_usage()
 	printf("please input a command, including followings:\n\tls\t\t\tlist all files\n\tcd <dir>\t\tchange direcotry\n\tcf <filename> <size>\tcreate a file\n\tdf <file>\t\tdelete a file\n\texit\t\t\texit this system\n");
 }
 
+void usage(void)
+{
+    exit(2);
+}
 
-int main()
+int main(int argc, char **argv)
 {
 	char input[10];
 	int size=0;
 	char name[12];
-	if((fd = open(DEVNAME,O_RDWR))<0)
-	  perror("open failed");//以可读写方式打开文件
+        if (argc<2)
+            usage();
+	if((fd = open(argv[1],O_RDWR))<0)
+	  err(1, "open failed");//以可读写方式打开文件
 	ScanBootSector();
 	if(ReadFat()<0)
 		exit(1);

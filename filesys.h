@@ -1,7 +1,4 @@
-﻿#ifndef FILESYS_H
-#define FILESYS_H
-#include<stddef.h>
-#define DEVNAME "/dev/sdb1" //这里要修改成虚拟u盘
+﻿#include<stddef.h>
 /*
  * 下面这些暴力算的虽然正确，但其实不合法。
  * 我们从BootSector中可以读出整个FAT的参数。
@@ -63,7 +60,7 @@ struct Entry{
 	*N  N  A  D  V  S  H  R         N未使用
 	*/
 
-        //这是某种C语言黑科技，表示定义的变量按照unsigned char解析，但是所占空间只分配一个bit。。。并不知道上一任助教或者老师从哪里找来的这种黑科技
+        //这是某种C语言黑科技，表示定义的变量按照unsigned char解析，但是所占空间只分配一个bit。。。并不知道上一任助教或者老师从哪里找来的这种黑科技（亲爱的助教您连这都不知道实在是太水了）
 	unsigned char readonly:1;
 	unsigned char hidden:1;
 	unsigned char system:1;
@@ -104,6 +101,3 @@ int dirno = 0;/*代表目录的层数*/
 struct Entry* fatherdir[10];
 
 unsigned char fatbuf[512*250];  
-
-#endif
-
