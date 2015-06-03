@@ -19,6 +19,9 @@ unsigned char fatbuf[512*250];
 int fat_offset;
 int fat_size;
 int rootdir_offset;
+int data_offset;
+
+int cluster_size;
 
 #define RevByte(l,h) ((l)|(h)<<8)
 #define RevWord(lowest,lower,higher,highest) ((highest)<< 24|(higher)<<16|(lower)<<8|lowest)
@@ -27,7 +30,7 @@ int rootdir_offset;
  *读取BootSector，获取FAT16的格式信息
  *打印启动项记录
  */
-void ScanBootSector()
+void ScanBootSector(void)
 {
     unsigned char buf[64];
     int ret,i;
@@ -58,11 +61,12 @@ void ScanBootSector()
 #undef WORD
 #undef BYTE
 
-    rootdir_offset = hdr.BytesPerSector +
-        hdr.FATs * hdr.SectorsPerFAT * hdr.BytesPerSector;
-
     fat_offset = hdr.BytesPerSector * hdr.ReservedSectors;
     fat_size = hdr.BytesPerSector * hdr.SectorsPerFAT;
+    rootdir_offset = hdr.BytesPerSector + hdr.FATs * fat_size;
+    data_offset = rootdir_offset + 32 * hdr.RootDirEntries;
+
+    cluster_size = hdr.SectorsPerCluster * hdr.BytesPerSector;
 
 #define PRINTS(x) printf("%-24s%s\n", #x, hdr.x)
 #define PRINTD(x) printf("%-24s%d\n", #x, hdr.x)
@@ -135,10 +139,10 @@ int GetEntry(struct Entry *pentry)
 {
     int ret,i;
     int count = 0;
-    unsigned char buf[DIR_ENTRY_SIZE], info[2];
+    unsigned char buf[32], info[2];
 
     /*读一个目录表项，即32字节*/
-    if( (ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+    if( (ret = read(fd,buf,32))<0)
         err(1, "read entry failed");
     count += ret;
 
@@ -149,7 +153,7 @@ int GetEntry(struct Entry *pentry)
         /*长文件名，忽略掉*/
         while (buf[11]== 0x0f)
         {
-            if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+            if((ret = read(fd,buf,32))<0)
                 err(1, "read root dir failed");
             count += ret;
         }
@@ -189,12 +193,12 @@ int GetEntry(struct Entry *pentry)
  *功能：显示当前目录的内容
  *返回值：1，成功；-1，失败
  */
-int fd_ls()
+int fd_ls(void)
 {
     int ret, offset,cluster_addr;
     struct Entry entry;
-    unsigned char buf[DIR_ENTRY_SIZE];
-    if( (ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+    unsigned char buf[32];
+    if( (ret = read(fd,buf,32))<0)
         err(1, "read entry failed");
     if(curdir==NULL)
         printf("Root_dir\n");
@@ -211,7 +215,7 @@ int fd_ls()
         offset = rootdir_offset;
 
         /*从根目录区开始遍历，直到数据区起始地址*/
-        while(offset < (DATA_OFFSET))
+        while(offset < (data_offset))
         {
             ret = GetEntry(&entry);
 
@@ -236,14 +240,14 @@ int fd_ls()
 
     else /*显示子目录*/
     {
-        cluster_addr = DATA_OFFSET + (curdir->FirstCluster-2) * CLUSTER_SIZE ;
+        cluster_addr = data_offset + (curdir->FirstCluster-2) * cluster_size ;
         if((ret = lseek(fd,cluster_addr,SEEK_SET))<0)
             err(1, "lseek cluster_addr failed");
 
         offset = cluster_addr;
 
         /*只读一簇的内容*/
-        while(offset<cluster_addr +CLUSTER_SIZE)
+        while(offset<cluster_addr +cluster_size)
         {
             ret = GetEntry(&entry);
             offset += abs(ret);
@@ -291,7 +295,7 @@ int ScanEntry (char *entryname,struct Entry *pentry,int mode)
         offset = rootdir_offset;
 
 
-        while(offset<DATA_OFFSET)
+        while(offset<data_offset)
         {
             ret = GetEntry(pentry);
             offset +=abs(ret);
@@ -307,12 +311,12 @@ int ScanEntry (char *entryname,struct Entry *pentry,int mode)
     /*扫描子目录*/
     else
     {
-        cluster_addr = DATA_OFFSET + (curdir->FirstCluster -2)*CLUSTER_SIZE;
+        cluster_addr = data_offset + (curdir->FirstCluster -2)*cluster_size;
         if((ret = lseek(fd,cluster_addr,SEEK_SET))<0)
             err(1, "lseek cluster_addr failed");
         offset= cluster_addr;
 
-        while(offset<cluster_addr + CLUSTER_SIZE)
+        while(offset<cluster_addr + cluster_size)
         {
             ret= GetEntry(pentry);
             offset += abs(ret);
@@ -485,15 +489,15 @@ int fd_cf(char *filename,int size)
     struct Entry *pentry;
     int ret,i=0,cluster_addr,offset;
     unsigned short cluster,clusterno[100];
-    unsigned char c[DIR_ENTRY_SIZE];
+    unsigned char c[32];
     int index,clustersize;
-    unsigned char buf[DIR_ENTRY_SIZE];
+    unsigned char buf[32];
     pentry = (struct Entry*)malloc(sizeof(struct Entry));
 
 
-    clustersize = (size / (CLUSTER_SIZE));
+    clustersize = (size / (cluster_size));
 
-    if(size % (CLUSTER_SIZE) != 0)
+    if(size % (cluster_size) != 0)
         clustersize ++;
 
     //扫描根目录，是否已存在该文件名
@@ -537,10 +541,10 @@ int fd_cf(char *filename,int size)
             if((ret= lseek(fd,rootdir_offset,SEEK_SET))<0)
                 err(1, "lseek rootdir_offset failed");
             offset = rootdir_offset;
-            while(offset < DATA_OFFSET)
+            while(offset < data_offset)
             {
                 //读取一个条目
-                if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+                if((ret = read(fd,buf,32))<0)
                     err(1, "read entry failed");
 
                 offset += abs(ret);
@@ -550,7 +554,7 @@ int fd_cf(char *filename,int size)
                     //buf[11]是attribute，但是感觉下面这个while循环并没有什么卵用。。。
                     while(buf[11] == 0x0f)
                     {
-                        if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+                        if((ret = read(fd,buf,32))<0)
                             err(1, "read root dir failed");
                         offset +=abs(ret);
                     }
@@ -584,7 +588,7 @@ int fd_cf(char *filename,int size)
                     /*而且这里还有个问题，就是对于目录表项的值为00的情况处理的不好*/
                     if(lseek(fd,offset,SEEK_SET)<0)
                         err(1, "lseek fd_cf failed");
-                    if(write(fd,&c,DIR_ENTRY_SIZE)<0)
+                    if(write(fd,&c,32)<0)
                         err(1, "write failed");
 
 
@@ -601,13 +605,13 @@ int fd_cf(char *filename,int size)
         else
         {
             //子目录的情况与根目录类似
-            cluster_addr = (curdir->FirstCluster -2 )*CLUSTER_SIZE + DATA_OFFSET;
+            cluster_addr = (curdir->FirstCluster -2 )*cluster_size + data_offset;
             if((ret= lseek(fd,cluster_addr,SEEK_SET))<0)
                 err(1, "lseek cluster_addr failed");
             offset = cluster_addr;
-            while(offset < cluster_addr + CLUSTER_SIZE)
+            while(offset < cluster_addr + cluster_size)
             {
-                if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+                if((ret = read(fd,buf,32))<0)
                     err(1, "read entry failed");
 
                 offset += abs(ret);
@@ -616,7 +620,7 @@ int fd_cf(char *filename,int size)
                 {
                     while(buf[11] == 0x0f)
                     {
-                        if((ret = read(fd,buf,DIR_ENTRY_SIZE))<0)
+                        if((ret = read(fd,buf,32))<0)
                             err(1, "read root dir failed");
                         offset +=abs(ret);
                     }
@@ -643,7 +647,7 @@ int fd_cf(char *filename,int size)
 
                     if(lseek(fd,offset,SEEK_SET)<0)
                         err(1, "lseek fd_cf failed");
-                    if(write(fd,&c,DIR_ENTRY_SIZE)<0)
+                    if(write(fd,&c,32)<0)
                         err(1, "write failed");
 
 

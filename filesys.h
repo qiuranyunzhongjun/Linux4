@@ -1,15 +1,4 @@
 ﻿#include<stddef.h>
-/*
- * 下面这些暴力算的虽然正确，但其实不合法。
- * 我们从BootSector中可以读出整个FAT的参数。
- * 这些参数会在ScanBootSector()的时候保存在BootDescriptor_t中
- */
-#define DIR_ENTRY_SIZE 32
-#define SECTOR_SIZE 512
-#define CLUSTER_SIZE 512*4
-#define DATA_OFFSET 512+250*512+250*512+512*32
-
-
 
 /*属性位掩码*/
 #define ATTR_READONLY 0x01
@@ -66,6 +55,10 @@ struct Entry{
     unsigned char archive:1;
 };
 
+#if 0
+extern check[(sizeof(struct Entry)==32)-1];
+#endif
+
 //下面这些函数的作用我写到.c文件中了。
 int fd_ls();
 int fd_cd(char *dir);
@@ -83,8 +76,7 @@ void findTime(unsigned short *hour,
               unsigned char info[2]);
 void ReadFat(void);
 void WriteFat(void);
-void ScanBootSector();
-void ScanRootEntry();
+void ScanBootSector(void);
 int ScanEntry(char *entryname,struct Entry *pentry,int mode);
 int GetEntry(struct Entry *entry);
 void FileNameFormat(unsigned char *name);
