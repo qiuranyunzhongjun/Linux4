@@ -348,10 +348,16 @@ int check_filename(char *name)
 /* cd one level */
 void fd_cd1(char *arg)
 {
-    if (!strcmp(arg, "..")) {
-        if (curdir) {
-            struct dirent *dir = cldata(curdir->start_cluster);
-            curdir = dir[1].start_cluster ? &dir[1] : 0;
+    if (!arg[0])
+        return;
+    if (arg[0] == '.') {
+        if (arg[1] == '.' && !arg[2]) {
+            if (curdir) {
+                struct dirent *dir = cldata(curdir->start_cluster);
+                curdir = dir[1].start_cluster ? &dir[1] : 0;
+            }
+        } else if (arg[1]) {
+            printf("invalid directory name: %s\n", arg);
         }
     } else {
         if (check_filename(arg)) {
@@ -368,6 +374,26 @@ void fd_cd1(char *arg)
     }
 }
 
+void fd_cd(char *path)
+{
+    char *tmp = strdup(path);
+    char *p = tmp;
+    if (*p == '/') {
+        curdir = 0;
+        p++;
+    }
+    for (;;) {
+        char *q = strchr(p, '/');
+        if (q)
+            *q = 0;
+        fd_cd1(p);
+        if (!q)
+            break;
+        p=q+1;
+    }
+    free(tmp);
+}
+
 void erase(struct dirent *ent)
 {
     int cl = ent->start_cluster;
@@ -382,13 +408,18 @@ void erase(struct dirent *ent)
     }
 }
 
+void erase_r(struct dirent *ent)
+{
+    if (ent->attrib & ISDIR && ent->filename[0] != '.')
+        walkdir(ent, erase_r);
+    erase(ent);
+}
+
 void fd_rm(struct dirent *ent, char *name)
 {
     struct dirent *e = find_entry_with_name(ent, name);
     if (e) {
-        if (e->attrib & ISDIR)
-            walkdir(e, erase);
-        erase(e);
+        erase_r(e);
     } else {
         printf("not found: %s\n", name);
     }
@@ -481,6 +512,7 @@ void init_time(struct dirent *e, struct tm *tm)
 {
     e->adate = e->mdate = e->cdate = fatdate(tm);
     e->mtime = e->ctime = fattime(tm);
+    e->ctime_milli = 0;
 }
 
 /* won't check for duplicate file name */
@@ -598,8 +630,11 @@ int main(int argc, char **argv)
         if (strcmp(input, "ls") == 0) {
             fd_ls(curdir);
         } else if(strcmp(input, "cd") == 0) {
-            if (scanf("%12s", name) == 1)
-                fd_cd1(name);
+            char *path;
+            if (scanf("%ms", &path) == 1) {
+                fd_cd(path);
+                free(path);
+            }
         } else if(strcmp(input, "rm") == 0) {
             if (scanf("%12s", name) == 1)
                 if (check_filename(name))
