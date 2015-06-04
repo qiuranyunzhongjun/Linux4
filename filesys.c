@@ -57,6 +57,7 @@ void walkdir(struct dirent *ent, void (*walkfn)(struct dirent *));
 uint8_t *fs;
 int fs_size;
 uint16_t *fat;
+int fat_size;
 int n_clusters;
 
 struct dirent *rootdir;
@@ -92,7 +93,7 @@ void init(void)
 #undef BYTE
 
     fat = (uint16_t *)(fs + hdr.BytesPerSector * hdr.ReservedSectors);
-    int fat_size = hdr.BytesPerSector * hdr.SectorsPerFAT;
+    fat_size = hdr.BytesPerSector * hdr.SectorsPerFAT;
     int rootdir_offset = hdr.BytesPerSector + hdr.FATs * fat_size;
     rootdir = (struct dirent *)(fs + rootdir_offset);
     rootdir_size = hdr.RootDirEntries * sizeof *rootdir;
@@ -561,6 +562,14 @@ void usage(void)
     exit(2);
 }
 
+void sync_fat(void)
+{
+    int i;
+    char *f = (char *) fat;
+    for (i=1; i<hdr.FATs; i++)
+        memcpy(f += fat_size, fat, fat_size);
+}
+
 int main(int argc, char **argv)
 {
     char input[8];
@@ -621,5 +630,6 @@ int main(int argc, char **argv)
             help();
         }
     }
+    sync_fat();
     return 0;
 }
